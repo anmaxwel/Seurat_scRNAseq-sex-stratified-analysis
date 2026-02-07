@@ -78,6 +78,137 @@ source("seurat_neo_lung_overview_pipeline.R")
 - All results are written to a local outputs directory
 - Large .rds objects should not be committed to the repository
 
+### 02_ucell_go_scoring.R
+
+**Purpose**
+- Scores a GO term gene set per cell type using ssGSEA (`GSVA`) and `UCell`
+- Summarizes median UCell scores by cell type, sex, and treatment
+- Tests Benzene vs Control within sex (Wilcoxon) and annotates significance
+- Generates:
+  - Dot plot of median UCell scores by cell type (faceted by sex)
+  - Heatmap of (Benzene - Control) median UCell deltas with significance stars
+  - Optional GO gene-level plots for selected cell types (avg expression + sex-stratified log2FC)
+
+**Inputs and assumptions**
+- `seurat_neo_lung` is already loaded in R
+- Metadata: `Treatment_by_Sex`, `seurat_clusters` exist
+- Mouse GO annotation via `org.Mm.eg.db`
+- GO term set by `GO_TERM` (example: `GO:0034340`)
+
+**Outputs**
+- `UCell_GO_<GO_TERM>_dotplot.tiff`
+- `UCell_GO_<GO_TERM>_heatmap.tiff`
+- Optional: per-celltype CSV + GO gene heatmaps for selected cell types
+
+**Run**
+- `source("02_ucell_go_scoring.R")`
+
+
+### 03_cellchat_am_signaling.R
+
+**Purpose**
+- Runs CellChat (mouse DB) per condition (`Treatment_by_Sex`)
+- Infers ligand–receptor communication networks and summarizes AM (and Prolif AM) outgoing signaling
+- Includes example visualizations (chord, signaling role heatmap, bubble) and AM→target strength summaries
+- Builds “top targets / top pathways” overview dot plot and faceted heatmap
+
+**Inputs and assumptions**
+- `seurat_neo_lung` is already loaded in R
+- Metadata: `Treatment_by_Sex`, `cell_type` exist
+- Uses `CellChatDB.mouse` (subset to “Secreted Signaling” by default)
+- Parallel plan set via `future::plan(multisession, workers = 4)`
+
+**Outputs**
+- Plots are printed; add `ggsave()` / `pdf()` calls if you want to persist them
+- Recommended addition: save objects for reuse
+  - `saveRDS(cellchat_objects, "cellchat_objects_by_group.rds")`
+
+**Run**
+- `source("03_cellchat_am_signaling.R")`
+
+
+### 04_progreny.dorothea.R
+
+**Purpose**
+- Fibroblast-focused “WOW” slides for pathway and TF activity:
+  - PROGENy pathway activity (per cell)
+  - DoRothEA TF activity via VIPER (per cell)
+- Computes median effect sizes (median Benzene minus median Control) within each sex
+- Generates UMAP feature panels (mako palette) for the top-shifted pathways and TFs per sex
+- Writes effect-size tables for ranking
+
+**Inputs and assumptions**
+- `seurat_neo_lung` is already loaded in R
+- Fibroblast cluster identity set by `fibro_cluster_ident` (default `13`)
+- Metadata column `Treatment_by_Sex` contains:
+  - `Control Female`, `Benzene Female`, `Control Male`, `Benzene Male`
+- Uses normalized expression from `assay_key` (default `"RNA"`)
+- If UMAP is missing in the subset, the script computes a quick PCA + UMAP on fibroblasts
+- With low biological replication, treat outputs as hypothesis-generating
+
+**Outputs**
+- Creates output folder:
+  - `Fibroblast_PROGENy_DoRothEA_cluster_<clusterID>/`
+- Saves within that folder:
+  - `PROGENy_effect_sizes_<Sex>_*.csv`
+  - `DoRothEA_effect_sizes_<Sex>_*.csv`
+  - `SLIDE1_PROGENy_activity_<Sex>_mako.png`
+  - `SLIDE2_DoRothEA_TF_activity_<Sex>_mako.png`
+  - `fibroblasts_with_PROGENy_DoRothEA.rds`
+
+**Run**
+- `source("04_progreny.dorothea.R")`
+
+
+### 05_scfea_flux_balance.R
+
+**Purpose**
+- Integrates scFEA outputs with Seurat for AM clusters (5 and 17):
+  - Adds scFEA flux predictions as a `FLUX` assay
+  - Adds scFEA balance predictions as a `BALANCE` assay
+- Performs example group comparisons with `FindMarkers` on FLUX/BALANCE
+- Generates example plots (UMAP in flux space, volcano/dot/bar plots)
+- Includes an Ensembl→symbol annotation block for RNA DEGs using `biomaRt`
+
+**Inputs and assumptions**
+- `seurat_neo_lung` is already loaded in R
+- scFEA output files exist (update paths as needed):
+  - `scFEA_flux_results_2.csv`
+  - `scFEA_balance_results_2.csv`
+- Cell barcode harmonization is handled with `gsub()` / `RenameCells()`, but you should verify it matches your naming conventions
+
+**Outputs**
+- `Seurat_cluster5_17_geneExpr.csv` (RNA counts export)
+- `BalanceTest_results_male.csv`
+- `Seurat5DEG_results_male.csv`
+- Additional plots printed unless you add `ggsave()`
+
+**Run**
+- `source("05_scfea_flux_balance.R")`
+
+
+### 06_go_enrichment_and_stimulus_panels.R
+
+**Purpose**
+- Runs cluster-specific differential expression (via `FindMarkers`) by `Treatment_by_Sex`
+- Performs GO Biological Process enrichment (clusterProfiler) and makes dotplots
+- Lets you drill into a GO term (by Description keyword) to list and plot DEGs in that term
+- Optional keyword-filtered GO plots (immune/infection/bacterial term filters)
+- Includes a stimulus-linked expression panel example in alveolar macrophages (cluster 5)
+
+**Inputs and assumptions**
+- `seurat_neo_lung` is already loaded in R
+- Metadata: `Treatment_by_Sex` exists
+- Mouse annotation via `org.Mm.eg.db`
+- Script uses clusters `13` and `5` in different sections; edit these to match your analysis targets
+
+**Outputs**
+- GO result tables saved as CSV (filenames defined in-script)
+- GO dotplots and DEG bar plots (save manually or add `ggsave()` where you want)
+
+**Run**
+- `source("06_go_enrichment_and_stimulus_panels.R")`
+
 ## Intended use
 
 This pipeline is designed to be transparent, quick to adapt, and reproducible. It is appropriate for exploratory analyses, method development, and trainee instruction.
